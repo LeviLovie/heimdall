@@ -7,6 +7,6 @@ fn main() {
     }
 
     let duration = start.elapsed();
-    println!("Time taken to send 10,000 logs: {:?}", duration);
+    println!("Time taken to send {} logs: {:?}", amount, duration);
     println!("Average time per log: {:?}", duration / amount as u32);
 }

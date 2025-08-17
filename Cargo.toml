@@ -6,6 +6,7 @@ build = "build.rs"
 
 [dependencies]
 anyhow = "1.0.99"
+argh = "0.1.13"
 chrono = "0.4.41"
 flatbuffers = "25.2.10"
 nng = "1.0.1"
