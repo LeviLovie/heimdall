@@ -10,23 +10,6 @@ pub struct Args {
     #[argh(switch, short = 'd', description = "enable dry run mode")]
     pub dry: bool,
 
-    #[argh(subcommand)]
-    pub cmd: Cmd,
-}
-
-#[derive(FromArgs, PartialEq, Debug)]
-#[argh(subcommand)]
-pub enum Cmd {
-    Receive(ReceiveArgs),
-}
-
-#[derive(FromArgs, PartialEq, Debug)]
-#[argh(
-    subcommand,
-    name = "receive",
-    description = "Receive logs from a specified address and port"
-)]
-pub struct ReceiveArgs {
     #[argh(
         option,
         short = 'a',
