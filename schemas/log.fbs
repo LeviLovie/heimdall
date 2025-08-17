@@ -1,0 +1,6 @@
+namespace log;
+
+table Log {
+  msg: string;
+  ts: long;
+}

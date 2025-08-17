@@ -1,0 +1,15 @@
+[package]
+name = "heimdall"
+version = "0.1.0"
+edition = "2024"
+build = "build.rs"
+
+[dependencies]
+anyhow = "1.0.99"
+chrono = "0.4.41"
+flatbuffers = "25.2.10"
+nng = "1.0.1"
+
+[build-dependencies]
+anyhow = "1.0.99"
+flatc-rust = "0.2.0"
