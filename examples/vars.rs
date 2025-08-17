@@ -14,8 +14,12 @@ fn try_main() -> Result<()> {
         .build()
         .context("Failed to build logger")?;
 
-    log!("Hello, world!");
+    log!("Starting processing entries...");
+    for i in 0..10 {
+        log!("Processing entry", "id" => i);
+    }
+    log!("Processing completed successfully.");
 
-    println!("Log message sent successfully.");
+    println!("Log messages sent successfully.");
     Ok(())
 }

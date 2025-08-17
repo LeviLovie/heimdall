@@ -8,7 +8,7 @@ pub fn parse() -> Args {
 #[argh(description = "The log analyzer")]
 pub struct Args {
     #[argh(switch, short = 'd', description = "enable dry run mode")]
-    pub dry: bool,
+    pub _dry: bool,
 
     #[argh(
         option,

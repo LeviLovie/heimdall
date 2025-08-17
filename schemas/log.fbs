@@ -1,6 +1,12 @@
 namespace log;
 
+table Var {
+  key: string;
+  val: string;
+}
+
 table Log {
   msg: string;
   ts: long;
+  vars: [Var];
 }
