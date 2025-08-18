@@ -14,11 +14,25 @@ impl std::fmt::Display for Log<'_> {
             })
             .collect::<Vec<_>>()
             .join(", ");
+        let context = self.context();
+        let context_str = if let Some(ctx) = context {
+            let version_str = if let Some(version) = ctx.version()
+                && version.len() > 0
+            {
+                format!(" version={}", version)
+            } else {
+                String::new()
+            };
+            format!("pid={}{}", ctx.pid(), version_str)
+        } else {
+            String::new()
+        };
 
         write!(
             f,
-            "{}: {} {}",
+            "{} {}: {} {}",
             timestamp,
+            context_str,
             self.msg().unwrap_or(""),
             vars_str
         )

@@ -5,8 +5,16 @@ table Var {
   val: string;
 }
 
+table Context {
+  pid: uint;
+  machine: string;
+  os: string;
+  version: string;
+}
+
 table Log {
   msg: string;
   ts: long;
   vars: [Var];
+  context: Context;
 }
