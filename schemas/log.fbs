@@ -15,6 +15,6 @@ table Context {
 table Log {
   msg: string;
   ts: long;
-  vars: [Var];
   context: Context;
+  vars: [Var];
 }

@@ -2,7 +2,9 @@ mod args;
 
 use anyhow::{Context, Result};
 use nng::{Protocol, Socket};
+use std::sync::{Arc, Mutex};
 
+use heimdall::prelude::*;
 use heimdall::schemas::log::log::Log;
 
 pub fn deserialize_log(buf: &[u8]) -> Result<Log> {
@@ -19,10 +21,17 @@ fn main() {
 fn try_main() -> Result<()> {
     let args = args::parse();
 
-    receive(&args).context("Failed to start a receiving server")
+    let storage: Arc<Mutex<Storage>> = Arc::new(Mutex::new(Storage::new()));
+
+    let storage_clone = storage.clone();
+    std::thread::spawn(move || {
+        receive(&args, storage_clone.clone()).context("Failed to start a receiving server")
+    });
+
+    loop {}
 }
 
-fn receive(args: &args::Args) -> Result<()> {
+fn receive(args: &args::Args, storate: Arc<Mutex<Storage>>) -> Result<()> {
     let bind = format!("tcp://{}:{}", args.address, args.port);
 
     let mut socket = Socket::new(Protocol::Pull0).context("Failed to create a new socket")?;
@@ -32,15 +41,21 @@ fn receive(args: &args::Args) -> Result<()> {
     println!("Listening for messages on {}", bind);
 
     loop {
-        if let Err(e) = listen(&mut socket) {
-            println!("Error: {:?}", e.context("Failed to recive message"));
-        }
+        match listen(&mut socket) {
+            Err(e) => println!("Error: {:?}", e.context("Failed to recive message")),
+            Ok(log) => {
+                println!("{}", log);
+                let mut storage = storate.lock().expect("Failed to lock storage");
+                storage.add_log(log);
+            }
+        };
     }
 }
 
-fn listen(socket: &mut Socket) -> Result<()> {
+fn listen(socket: &mut Socket) -> Result<RsLog> {
     let msg = socket.recv().context("Failed to receive message")?;
-    let log = deserialize_log(&msg).context("Failed to deserialize log message")?;
-    println!("{}", log);
-    Ok(())
+    let buf: Vec<u8> = msg.as_slice().to_vec();
+    let log = flatbuffers::root::<Log>(&buf).context("Failed to deserialize log message")?;
+    let log: RsLog = log.into();
+    Ok(log)
 }

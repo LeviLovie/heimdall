@@ -7,8 +7,8 @@ pub fn parse() -> Args {
 #[derive(FromArgs, Debug)]
 #[argh(description = "The log analyzer")]
 pub struct Args {
-    #[argh(switch, short = 'd', description = "enable dry run mode")]
-    pub _dry: bool,
+    #[argh(switch, short = 't', description = "enable TUI")]
+    pub tui: bool,
 
     #[argh(
         option,
