@@ -4,7 +4,7 @@ pub fn parse() -> Args {
     argh::from_env()
 }
 
-#[derive(FromArgs, Debug)]
+#[derive(Clone, FromArgs, Debug)]
 #[argh(description = "The log analyzer")]
 pub struct Args {
     #[argh(switch, short = 't', description = "enable TUI")]

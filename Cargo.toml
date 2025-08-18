@@ -8,9 +8,12 @@ build = "build.rs"
 anyhow = "1.0.99"
 argh = "0.1.13"
 chrono = "0.4.41"
+color-eyre = "0.6.5"
+crossterm = "0.29.0"
 flatbuffers = "25.2.10"
 machine-uid = "0.5.3"
 nng = "1.0.1"
+ratatui = "0.29.0"
 sys-info = "0.9.1"
 
 [build-dependencies]

@@ -1,4 +1,5 @@
 mod args;
+mod tui;
 
 use anyhow::{Context, Result};
 use nng::{Protocol, Socket};
@@ -24,27 +25,39 @@ fn try_main() -> Result<()> {
     let storage: Arc<Mutex<Storage>> = Arc::new(Mutex::new(Storage::new()));
 
     let storage_clone = storage.clone();
+    let args_clone = args.clone();
     std::thread::spawn(move || {
-        receive(&args, storage_clone.clone()).context("Failed to start a receiving server")
+        receive(args_clone, storage_clone).context("Failed to start a receiving server")
     });
 
-    loop {}
+    if args.tui {
+        tui::start(storage).context("Failed to run TUI")?;
+    } else {
+        loop {}
+    }
+
+    Ok(())
 }
 
-fn receive(args: &args::Args, storate: Arc<Mutex<Storage>>) -> Result<()> {
+fn receive(args: args::Args, storate: Arc<Mutex<Storage>>) -> Result<()> {
     let bind = format!("tcp://{}:{}", args.address, args.port);
 
     let mut socket = Socket::new(Protocol::Pull0).context("Failed to create a new socket")?;
     socket
         .listen(&bind)
         .context("Failed to bind socket to address")?;
-    println!("Listening for messages on {}", bind);
+
+    if !args.tui {
+        println!("Listening for messages on {}", bind);
+    }
 
     loop {
         match listen(&mut socket) {
             Err(e) => println!("Error: {:?}", e.context("Failed to recive message")),
             Ok(log) => {
-                println!("{}", log);
+                if !args.tui {
+                    println!("{}", log);
+                }
                 let mut storage = storate.lock().expect("Failed to lock storage");
                 storage.add_log(log);
             }
