@@ -42,14 +42,14 @@ impl RsLog {
             .collect();
 
         Self {
-            msg: msg.into(),
+            msg,
             ts,
             context,
             vars,
         }
     }
 
-    pub fn build<'a>(self) -> Vec<u8> {
+    pub fn build(self) -> Vec<u8> {
         let mut builder = flatbuffers::FlatBufferBuilder::with_capacity(1024);
 
         let ts_string =
@@ -120,7 +120,7 @@ impl From<Log<'_>> for RsLog {
             ts,
             context: RsContext {
                 app: context.and_then(|ctx| ctx.app()).unwrap_or("").to_string(),
-                pid: context.and_then(|ctx| Some(ctx.pid())).unwrap_or(0),
+                pid: context.map(|ctx| ctx.pid()).unwrap_or(0),
                 machine: context
                     .and_then(|ctx| ctx.machine())
                     .unwrap_or("")
@@ -144,7 +144,7 @@ impl std::fmt::Display for RsLog {
             .map(|var| format!("{}={}", var.key, var.val))
             .collect::<Vec<_>>()
             .join(", ");
-        let version_str = if self.context.version.len() > 0 {
+        let version_str = if !self.context.version.is_empty() {
             format!(" version={}", self.context.version)
         } else {
             String::new()

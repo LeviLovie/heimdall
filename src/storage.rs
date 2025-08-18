@@ -9,6 +9,12 @@ pub struct Storage {
     pub updated: bool,
 }
 
+impl Default for Storage {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Storage {
     pub fn new() -> Self {
         Self {

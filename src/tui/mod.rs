@@ -36,7 +36,6 @@ struct App {
     storage: Arc<Mutex<Storage>>,
     logs_amount: usize,
     should_exit: bool,
-    show_info: bool,
     logs_state: ListState,
 }
 
@@ -46,7 +45,6 @@ impl App {
             storage,
             logs_amount: 0,
             should_exit: false,
-            show_info: true,
             logs_state: ListState::default(),
         }
     }
@@ -73,11 +71,9 @@ impl App {
 
         if self.logs_state.selected().is_none() && self.logs_amount > 0 {
             self.logs_state.select(Some(0));
-        } else {
-            if self.logs_state.selected().unwrap_or(0) >= self.logs_amount {
-                self.logs_state
-                    .select(Some(self.logs_amount.saturating_sub(1)));
-            }
+        } else if self.logs_state.selected().unwrap_or(0) >= self.logs_amount {
+            self.logs_state
+                .select(Some(self.logs_amount.saturating_sub(1)));
         }
 
         Ok(())
@@ -85,8 +81,8 @@ impl App {
 
     fn pool_events(&mut self) -> Result<()> {
         if event::poll(Duration::from_millis(250)).context("Failed to poll event")? {
-            match event::read().context("Failed to read event")? {
-                event::Event::Key(key) => match key.code {
+            if let event::Event::Key(key) = event::read().context("Failed to read event")? {
+                match key.code {
                     KeyCode::Char('q') => {
                         self.should_exit = true;
                         return Ok(());
@@ -99,8 +95,7 @@ impl App {
                         self.logs_state.select_next();
                     }
                     _ => {}
-                },
-                _ => {}
+                }
             }
         }
         Ok(())
@@ -108,7 +103,7 @@ impl App {
 
     fn get_log(&self, index: usize) -> Option<RsLog> {
         let storage = self.storage.lock().expect("Failed to lock storage");
-        let logs = storage.get_logs().clone().iter().rev().collect::<Vec<_>>();
+        let logs = storage.get_logs().iter().rev().collect::<Vec<_>>();
         if index < logs.len() {
             Some(logs[index].clone())
         } else {
@@ -121,7 +116,7 @@ impl App {
         let logs = storage
             .get_logs()
             .iter()
-            .map(|log| format!("{}", log))
+            .map(|log| format!("{log}"))
             .rev()
             .collect::<Vec<_>>();
         List::new(logs).direction(ListDirection::BottomToTop)
@@ -219,9 +214,9 @@ impl Widget for &App {
                     ),
                 ]),
                 Line::from(""),
-                Line::from(format!("{}", log.msg)),
+                Line::from(log.msg.to_string()),
             ];
-            if log.vars.len() > 0 {
+            if !log.vars.is_empty() {
                 lines.push(Line::from(""));
                 lines.push(Line::from(vec![Span::styled(
                     "with",
@@ -234,7 +229,7 @@ impl Widget for &App {
                             format!("{}: ", var.key),
                             Style::default().fg(Color::DarkGray),
                         ),
-                        Span::styled(format!("{}", var.val), Style::default().fg(Color::Green)),
+                        Span::styled(var.val.to_string(), Style::default().fg(Color::Green)),
                     ])
                 }));
             }

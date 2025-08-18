@@ -34,7 +34,7 @@ impl LoggerBuilder {
     }
 
     pub fn with_address_port(mut self, address: &str, port: u16) -> Self {
-        self.bind = Some(format!("tcp://{}:{}", address, port));
+        self.bind = Some(format!("tcp://{address}:{port}"));
         self
     }
 
@@ -87,7 +87,7 @@ impl LoggerBuilder {
     fn get_os() -> String {
         let kind = sys_info::os_type().unwrap_or_else(|_| "Unknown".to_string());
         let release = sys_info::os_release().unwrap_or_else(|_| "Unknown".to_string());
-        format!("{} {}", kind, release)
+        format!("{kind} {release}")
     }
 }
 

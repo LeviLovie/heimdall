@@ -14,7 +14,7 @@ pub fn deserialize_log(buf: &[u8]) -> Result<Log> {
 
 fn main() {
     if let Err(e) = try_main() {
-        eprintln!("Error: {:?}", e);
+        eprintln!("Error: {e:?}");
         std::process::exit(1);
     }
 }
@@ -33,6 +33,7 @@ fn try_main() -> Result<()> {
     if args.tui {
         tui::start(storage).context("Failed to run TUI")?;
     } else {
+        #[allow(clippy::empty_loop)]
         loop {}
     }
 
@@ -48,7 +49,7 @@ fn receive(args: args::Args, storate: Arc<Mutex<Storage>>) -> Result<()> {
         .context("Failed to bind socket to address")?;
 
     if !args.tui {
-        println!("Listening for messages on {}", bind);
+        println!("Listening for messages on {bind}");
     }
 
     loop {
@@ -56,7 +57,7 @@ fn receive(args: args::Args, storate: Arc<Mutex<Storage>>) -> Result<()> {
             Err(e) => println!("Error: {:?}", e.context("Failed to recive message")),
             Ok(log) => {
                 if !args.tui {
-                    println!("{}", log);
+                    println!("{log}");
                 }
                 let mut storage = storate.lock().expect("Failed to lock storage");
                 storage.add_log(log);

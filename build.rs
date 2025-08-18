@@ -17,12 +17,12 @@ fn try_main() -> Result<()> {
     })
     .context("Failed to run flatc")?;
 
-    return Ok(());
+    Ok(())
 }
 
 fn main() {
     if let Err(e) = try_main() {
-        eprintln!("Error: {:?}", e);
+        eprintln!("Error: {e:?}");
         std::process::exit(1);
     }
 }
