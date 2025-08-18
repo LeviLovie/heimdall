@@ -11,6 +11,8 @@ fn main() {
 fn try_main() -> Result<()> {
     Logger::builder()
         .with_address_port("127.0.0.1", 62000)
+        .with_app_name("entity_processor")
+        .with_version("1.0.0")
         .build()
         .context("Failed to build logger")?;
 

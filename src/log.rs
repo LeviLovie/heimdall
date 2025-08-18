@@ -1,3 +1,5 @@
+use chrono::{DateTime, FixedOffset};
+
 use crate::schemas::log::log::{Context, ContextArgs, Log, LogArgs, Var, VarArgs};
 
 pub mod prelude {
@@ -12,6 +14,7 @@ pub struct RsVar {
 
 #[derive(Debug, Clone)]
 pub struct RsContext {
+    pub app: String,
     pub pid: u32,
     pub machine: String,
     pub os: String,
@@ -21,13 +24,18 @@ pub struct RsContext {
 #[derive(Debug, Clone)]
 pub struct RsLog {
     pub msg: String,
-    pub ts: u64,
+    pub ts: DateTime<FixedOffset>,
     pub context: RsContext,
     pub vars: Vec<RsVar>,
 }
 
 impl RsLog {
-    pub fn new(msg: String, vars: Vec<(String, String)>, ts: u64, context: RsContext) -> Self {
+    pub fn new(
+        msg: String,
+        vars: Vec<(String, String)>,
+        ts: DateTime<FixedOffset>,
+        context: RsContext,
+    ) -> Self {
         let vars = vars
             .into_iter()
             .map(|(key, val)| RsVar { key, val })
@@ -44,6 +52,8 @@ impl RsLog {
     pub fn build<'a>(self) -> Vec<u8> {
         let mut builder = flatbuffers::FlatBufferBuilder::with_capacity(1024);
 
+        let ts_string =
+            builder.create_string(&self.ts.to_rfc3339_opts(chrono::SecondsFormat::Micros, true));
         let msg = builder.create_string(&self.msg);
         let vars = self
             .vars
@@ -61,12 +71,14 @@ impl RsLog {
             })
             .collect::<Vec<_>>();
         let vars_array = builder.create_vector(&vars);
+        let app_string = builder.create_string(&self.context.app);
         let machine_string = builder.create_string(&self.context.machine);
         let os_string = builder.create_string(&self.context.os);
         let version_string = builder.create_string(&self.context.version);
         let context = Context::create(
             &mut builder,
             &ContextArgs {
+                app: Some(app_string),
                 pid: self.context.pid,
                 machine: Some(machine_string),
                 os: Some(os_string),
@@ -77,7 +89,7 @@ impl RsLog {
             &mut builder,
             &LogArgs {
                 msg: Some(msg),
-                ts: self.ts as i64,
+                ts: Some(ts_string),
                 context: Some(context),
                 vars: Some(vars_array),
             },
@@ -99,23 +111,22 @@ impl From<Log<'_>> for RsLog {
                 val: var.val().unwrap_or("").to_string(),
             })
             .collect();
+        let ts: DateTime<FixedOffset> =
+            DateTime::parse_from_rfc3339(log.ts().expect("Log is missing a timestamp"))
+                .expect("Failed to parse timestamp");
+        let context = log.context();
         Self {
             msg: log.msg().unwrap_or("").to_string(),
-            ts: log.ts() as u64,
+            ts,
             context: RsContext {
-                pid: log.context().map_or(0, |ctx| ctx.pid()),
-                machine: log
-                    .context()
+                app: context.and_then(|ctx| ctx.app()).unwrap_or("").to_string(),
+                pid: context.and_then(|ctx| Some(ctx.pid())).unwrap_or(0),
+                machine: context
                     .and_then(|ctx| ctx.machine())
                     .unwrap_or("")
                     .to_string(),
-                os: log
-                    .context()
-                    .and_then(|ctx| ctx.os())
-                    .unwrap_or("")
-                    .to_string(),
-                version: log
-                    .context()
+                os: context.and_then(|ctx| ctx.os()).unwrap_or("").to_string(),
+                version: context
                     .and_then(|ctx| ctx.version())
                     .unwrap_or("")
                     .to_string(),
@@ -127,8 +138,6 @@ impl From<Log<'_>> for RsLog {
 
 impl std::fmt::Display for RsLog {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let timestamp = chrono::DateTime::<chrono::Utc>::from_timestamp_millis(self.ts as i64)
-            .unwrap_or_else(|| chrono::Utc::now());
         let vars_str = self
             .vars
             .iter()
@@ -142,10 +151,6 @@ impl std::fmt::Display for RsLog {
         };
         let context_str = format!("pid={}{}", self.context.pid, version_str);
 
-        write!(
-            f,
-            "{} {}: {} {}",
-            timestamp, context_str, self.msg, vars_str
-        )
+        write!(f, "{} {}: {} {}", self.ts, context_str, self.msg, vars_str)
     }
 }

@@ -1,4 +1,5 @@
 use anyhow::{anyhow, bail, Context, Result};
+use chrono::Local;
 use nng::Socket;
 use std::sync::{Mutex, OnceLock};
 
@@ -10,10 +11,20 @@ pub mod prelude {
 
 pub static GLOBAL_LOGGER: OnceLock<Mutex<Logger>> = OnceLock::new();
 
-#[derive(Default)]
 pub struct LoggerBuilder {
     bind: Option<String>,
+    app_name: String,
     version: String,
+}
+
+impl Default for LoggerBuilder {
+    fn default() -> Self {
+        Self {
+            bind: None,
+            app_name: "default".to_string(),
+            version: "0.0.0".to_string(),
+        }
+    }
 }
 
 impl LoggerBuilder {
@@ -27,8 +38,13 @@ impl LoggerBuilder {
         self
     }
 
-    pub fn with_version(mut self, version: String) -> Self {
-        self.version = version;
+    pub fn with_app_name(mut self, app_name: &str) -> Self {
+        self.app_name = app_name.to_string();
+        self
+    }
+
+    pub fn with_version(mut self, version: &str) -> Self {
+        self.version = version.to_string();
         self
     }
 
@@ -49,6 +65,7 @@ impl LoggerBuilder {
         };
         let os = Self::get_os();
         let context = RsContext {
+            app: self.app_name,
             pid,
             machine,
             os,
@@ -86,8 +103,7 @@ impl Logger {
     }
 
     pub fn log(&self, msg: impl Into<String>, vars: Vec<(String, String)>) -> Result<()> {
-        let ts: u64 = chrono::Utc::now().timestamp_millis() as u64;
-        let log = RsLog::new(msg.into(), vars, ts, self.context.clone());
+        let log = RsLog::new(msg.into(), vars, Local::now().into(), self.context.clone());
         let buf = log.build();
 
         if let Err(e) = self.socket.send(&buf) {
