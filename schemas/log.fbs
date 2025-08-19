@@ -8,14 +8,13 @@ table Var {
 table Context {
   app: string;
   pid: uint;
-  machine: string;
   os: string;
   version: string;
 }
 
 table Log {
-  msg: string;
   ts: string;
+  msg: string;
   context: Context;
   vars: [Var];
 }

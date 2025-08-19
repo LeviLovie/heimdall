@@ -59,15 +59,10 @@ impl LoggerBuilder {
             .context("Failed to connect to the server")?;
 
         let pid = std::process::id();
-        let machine = match machine_uid::get() {
-            Ok(uid) => uid.to_string(),
-            Err(_) => bail!("Failed to get machine UID"),
-        };
         let os = Self::get_os();
         let context = RsContext {
             app: self.app_name,
             pid,
-            machine,
             os,
             version: self.version,
         };
@@ -103,7 +98,7 @@ impl Logger {
     }
 
     pub fn log(&self, msg: impl Into<String>, vars: Vec<(String, String)>) -> Result<()> {
-        let log = RsLog::new(msg.into(), vars, Local::now().into(), self.context.clone());
+        let log = RsLog::new(Local::now().into(), msg.into(), self.context.clone(), vars);
         let buf = log.build();
 
         if let Err(e) = self.socket.send(&buf) {

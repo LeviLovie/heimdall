@@ -16,25 +16,25 @@ pub struct RsVar {
 pub struct RsContext {
     pub app: String,
     pub pid: u32,
-    pub machine: String,
     pub os: String,
     pub version: String,
 }
 
 #[derive(Debug, Clone)]
 pub struct RsLog {
-    pub msg: String,
     pub ts: DateTime<FixedOffset>,
+    pub msg: String,
+    pub ip: String,
     pub context: RsContext,
     pub vars: Vec<RsVar>,
 }
 
 impl RsLog {
     pub fn new(
-        msg: String,
-        vars: Vec<(String, String)>,
         ts: DateTime<FixedOffset>,
+        msg: String,
         context: RsContext,
+        vars: Vec<(String, String)>,
     ) -> Self {
         let vars = vars
             .into_iter()
@@ -42,9 +42,41 @@ impl RsLog {
             .collect();
 
         Self {
-            msg,
             ts,
+            msg,
+            ip: String::new(),
             context,
+            vars,
+        }
+    }
+
+    pub fn from(log: Log<'_>, ip: String) -> Self {
+        let vars = log
+            .vars()
+            .unwrap_or_default()
+            .iter()
+            .map(|var| RsVar {
+                key: var.key().unwrap_or("").to_string(),
+                val: var.val().unwrap_or("").to_string(),
+            })
+            .collect();
+        let ts: DateTime<FixedOffset> =
+            DateTime::parse_from_rfc3339(log.ts().expect("Log is missing a timestamp"))
+                .expect("Failed to parse timestamp");
+        let context = log.context();
+        Self {
+            ts,
+            msg: log.msg().unwrap_or("").to_string(),
+            ip,
+            context: RsContext {
+                app: context.and_then(|ctx| ctx.app()).unwrap_or("").to_string(),
+                pid: context.map(|ctx| ctx.pid()).unwrap_or(0),
+                os: context.and_then(|ctx| ctx.os()).unwrap_or("").to_string(),
+                version: context
+                    .and_then(|ctx| ctx.version())
+                    .unwrap_or("")
+                    .to_string(),
+            },
             vars,
         }
     }
@@ -72,7 +104,6 @@ impl RsLog {
             .collect::<Vec<_>>();
         let vars_array = builder.create_vector(&vars);
         let app_string = builder.create_string(&self.context.app);
-        let machine_string = builder.create_string(&self.context.machine);
         let os_string = builder.create_string(&self.context.os);
         let version_string = builder.create_string(&self.context.version);
         let context = Context::create(
@@ -80,7 +111,6 @@ impl RsLog {
             &ContextArgs {
                 app: Some(app_string),
                 pid: self.context.pid,
-                machine: Some(machine_string),
                 os: Some(os_string),
                 version: Some(version_string),
             },
@@ -88,8 +118,8 @@ impl RsLog {
         let log_offset = Log::create(
             &mut builder,
             &LogArgs {
-                msg: Some(msg),
                 ts: Some(ts_string),
+                msg: Some(msg),
                 context: Some(context),
                 vars: Some(vars_array),
             },
@@ -97,42 +127,6 @@ impl RsLog {
 
         builder.finish(log_offset, None);
         builder.finished_data().to_vec()
-    }
-}
-
-impl From<Log<'_>> for RsLog {
-    fn from(log: Log<'_>) -> Self {
-        let vars = log
-            .vars()
-            .unwrap_or_default()
-            .iter()
-            .map(|var| RsVar {
-                key: var.key().unwrap_or("").to_string(),
-                val: var.val().unwrap_or("").to_string(),
-            })
-            .collect();
-        let ts: DateTime<FixedOffset> =
-            DateTime::parse_from_rfc3339(log.ts().expect("Log is missing a timestamp"))
-                .expect("Failed to parse timestamp");
-        let context = log.context();
-        Self {
-            msg: log.msg().unwrap_or("").to_string(),
-            ts,
-            context: RsContext {
-                app: context.and_then(|ctx| ctx.app()).unwrap_or("").to_string(),
-                pid: context.map(|ctx| ctx.pid()).unwrap_or(0),
-                machine: context
-                    .and_then(|ctx| ctx.machine())
-                    .unwrap_or("")
-                    .to_string(),
-                os: context.and_then(|ctx| ctx.os()).unwrap_or("").to_string(),
-                version: context
-                    .and_then(|ctx| ctx.version())
-                    .unwrap_or("")
-                    .to_string(),
-            },
-            vars,
-        }
     }
 }
 

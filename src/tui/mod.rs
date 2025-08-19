@@ -6,7 +6,7 @@ use ratatui::{
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{
-        Block, BorderType, List, ListDirection, ListState, Paragraph, StatefulWidget, Widget,
+        Block, BorderType, List, ListDirection, ListState, Paragraph, StatefulWidget, Widget, Wrap,
     },
     DefaultTerminal,
 };
@@ -134,7 +134,7 @@ impl Widget for &App {
             .get_log(self.logs_state.selected().unwrap_or(0))
             .is_some()
         {
-            Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)])
+            Layout::horizontal([Constraint::Fill(2), Constraint::Fill(1)])
         } else {
             Layout::horizontal([Constraint::Min(10), Constraint::Max(0)])
         }
@@ -202,8 +202,10 @@ impl Widget for &App {
                 Line::from(vec![
                     Span::styled("on ", Style::default().fg(Color::DarkGray)),
                     Span::styled(
-                        format!("{} ", log.context.machine),
-                        Style::default().fg(Color::Green),
+                        format!("{} ", log.ip),
+                        Style::default()
+                            .fg(Color::Green)
+                            .add_modifier(Modifier::BOLD),
                     ),
                     Span::styled("pid ", Style::default().fg(Color::DarkGray)),
                     Span::styled(
@@ -233,7 +235,9 @@ impl Widget for &App {
                     ])
                 }));
             }
-            let paragraph = Paragraph::new(lines).block(info_block);
+            let paragraph = Paragraph::new(lines)
+                .wrap(Wrap { trim: false })
+                .block(info_block);
             paragraph.render(info_area, buf);
         }
     }

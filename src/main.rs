@@ -2,7 +2,8 @@ mod args;
 mod tui;
 
 use anyhow::{Context, Result};
-use nng::{Protocol, Socket};
+use nng::options::{Options, RemAddr};
+use nng::{Pipe, Protocol, Socket};
 use std::sync::{Arc, Mutex};
 
 use heimdall::prelude::*;
@@ -67,9 +68,14 @@ fn receive(args: args::Args, storate: Arc<Mutex<Storage>>) -> Result<()> {
 }
 
 fn listen(socket: &mut Socket) -> Result<RsLog> {
-    let msg = socket.recv().context("Failed to receive message")?;
+    let mut msg = socket.recv().context("Failed to receive message")?;
+    let pipe: Pipe = msg.pipe().context("Message missing pipe")?;
+    let ip = pipe
+        .get_opt::<RemAddr>()
+        .context("Failed to get remote address")?
+        .to_string();
     let buf: Vec<u8> = msg.as_slice().to_vec();
     let log = flatbuffers::root::<Log>(&buf).context("Failed to deserialize log message")?;
-    let log: RsLog = log.into();
+    let log: RsLog = RsLog::from(log, ip);
     Ok(log)
 }
