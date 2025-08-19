@@ -11,9 +11,10 @@ pub enum ThreadType {
     HTTP,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum ThreadStatus {
     Running,
+    Terminating,
     Stopped,
     Failed(String),
 }
@@ -42,5 +43,27 @@ impl Statuses {
             .iter()
             .map(|(thread_type, status)| (thread_type.clone(), status.clone()))
             .collect()
+    }
+
+    pub fn must_terminate(&self, thread_type: ThreadType) -> bool {
+        matches!(
+            self.statuses.get(&thread_type),
+            Some(ThreadStatus::Terminating)
+        )
+    }
+
+    pub fn terminate_all(&mut self) {
+        for status in self.statuses.values_mut() {
+            *status = ThreadStatus::Terminating;
+        }
+    }
+
+    pub fn all_stopped_except(&self, thread_type: ThreadType) -> bool {
+        let res = self.statuses.iter().all(|(t, status)| {
+            *t == thread_type
+                || *status == ThreadStatus::Stopped
+                || matches!(*status, ThreadStatus::Failed(_))
+        });
+        res
     }
 }

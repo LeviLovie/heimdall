@@ -1,3 +1,5 @@
+mod panels;
+
 use anyhow::{anyhow, Context, Result};
 use crossterm::event::{self, KeyCode, KeyModifiers};
 use ratatui::{
@@ -15,14 +17,15 @@ use std::{
     time::Duration,
 };
 
-use heimdall::{log::RsLog, status::Statuses, storage::Storage};
+use crate::data::Data;
+use heimdall::{log::RsLog, status::ThreadType};
 
-pub fn start(statuses: Arc<Mutex<Statuses>>, storage: Arc<Mutex<Storage>>) -> Result<()> {
+pub fn start(data: Arc<Mutex<Data>>) -> Result<()> {
     color_eyre::install()
         .map_err(|r| anyhow!("{}", r))
         .context("Failed to install color_eyre")?;
 
-    let app = App::new(statuses, storage);
+    let app = App::new(data);
 
     let terminal = ratatui::init();
     app.run(terminal)
@@ -33,8 +36,7 @@ pub fn start(statuses: Arc<Mutex<Statuses>>, storage: Arc<Mutex<Storage>>) -> Re
 }
 
 struct App {
-    statuses: Arc<Mutex<Statuses>>,
-    storage: Arc<Mutex<Storage>>,
+    data: Arc<Mutex<Data>>,
     should_exit: bool,
     logs_state: ListState,
     logs_scroll: usize,
@@ -43,10 +45,9 @@ struct App {
 }
 
 impl App {
-    pub fn new(statuses: Arc<Mutex<Statuses>>, storage: Arc<Mutex<Storage>>) -> Self {
+    pub fn new(data: Arc<Mutex<Data>>) -> Self {
         Self {
-            statuses,
-            storage,
+            data,
             should_exit: false,
             logs_state: ListState::default(),
             logs_scroll: 0,
@@ -58,8 +59,8 @@ impl App {
     pub fn run(mut self, mut terminal: DefaultTerminal) -> Result<()> {
         loop {
             terminal.draw(|frame| frame.render_widget(&self, frame.area()))?;
-            self.pool_events().context("Failed to pool events")?;
             self.update().context("Failed to update the app")?;
+            self.pool_events().context("Failed to pool events")?;
 
             if self.should_exit {
                 break;
@@ -69,11 +70,16 @@ impl App {
     }
 
     fn update(&mut self) -> Result<()> {
+        if self
+            .data
+            .lock()
+            .unwrap()
+            .statuses
+            .all_stopped_except(ThreadType::TUI)
         {
-            let storage = self.storage.lock().expect("Failed to lock storage");
-            let logs = storage.get_logs();
-            self.logs_amount = logs.len();
-        };
+            self.should_exit = true;
+        }
+        self.logs_amount = self.data.lock().unwrap().storage.get_logs().len();
 
         if self.logs_state.selected().is_none() && self.logs_amount > 0 {
             self.logs_state.select(Some(0));
@@ -101,6 +107,7 @@ impl App {
             if let event::Event::Key(key) = event::read().context("Failed to read event")? {
                 match (key.modifiers, key.code) {
                     (KeyModifiers::NONE, KeyCode::Char('q')) => {
+                        self.data.lock().unwrap().statuses.terminate_all();
                         self.should_exit = true;
                         return Ok(());
                     }
@@ -153,18 +160,14 @@ impl App {
     }
 
     fn get_log(&self, index: usize) -> Option<RsLog> {
-        let storage = self.storage.lock().expect("Failed to lock storage");
-        let logs = storage.get_logs().iter().rev().collect::<Vec<_>>();
-        if index < logs.len() {
-            Some(logs[index].clone())
-        } else {
-            None
-        }
+        let data = self.data.lock().unwrap();
+        let logs = data.storage.get_logs().iter().rev().collect::<Vec<_>>();
+        logs.get(index).map(|log| (*log).clone())
     }
 
     fn get_visible_logs(&self, height: usize) -> Vec<Line> {
-        let storage = self.storage.lock().expect("Failed to lock storage");
-        let logs = storage.get_logs().iter().rev().collect::<Vec<_>>();
+        let data = self.data.lock().unwrap();
+        let logs = data.storage.get_logs().iter().rev().collect::<Vec<_>>();
 
         if logs.is_empty() {
             return vec![];
@@ -247,14 +250,16 @@ impl Widget for &App {
                 .border_type(BorderType::Rounded);
 
             let threads = self
-                .statuses
+                .data
                 .lock()
-                .expect("Failed to lock statuses")
+                .unwrap()
+                .statuses
                 .get_all()
                 .iter()
                 .map(|(kind, status)| {
                     let status_color = match status {
                         heimdall::status::ThreadStatus::Running => Color::Green,
+                        heimdall::status::ThreadStatus::Terminating => Color::Magenta,
                         heimdall::status::ThreadStatus::Stopped => Color::Yellow,
                         heimdall::status::ThreadStatus::Failed(_) => Color::Red,
                     };

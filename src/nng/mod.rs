@@ -5,33 +5,46 @@ use nng::{
 };
 use std::sync::{Arc, Mutex};
 
-use crate::args::Args;
+use crate::data::Data;
 use heimdall::{prelude::*, schemas::log::log::Log};
 
-pub fn receive(args: Args, port: u16, storate: Arc<Mutex<Storage>>) -> Result<()> {
-    let bind = format!("tcp://{}:{}", args.address, port);
+pub fn receive(data: Arc<Mutex<Data>>, port: u16) -> Result<()> {
+    let bind = format!("tcp://{}:{}", data.lock().unwrap().args.address, port);
+    let print_info = !data.lock().unwrap().args.tui;
 
     let mut socket = Socket::new(Protocol::Pull0).context("Failed to create a new socket")?;
     socket
         .listen(&bind)
         .context("Failed to bind socket to address")?;
 
-    if !args.tui {
-        println!("Listening for messages on {bind}");
+    if print_info {
+        // println!("Listening for messages on {bind}");
     }
 
     loop {
+        let must_terminate = {
+            let data_lock = data.lock().unwrap();
+            data_lock.statuses.must_terminate(ThreadType::NNG)
+        };
+        if must_terminate {
+            if print_info {
+                println!("Terminating NNG listener thread");
+            }
+            break;
+        }
+
         match listen(&mut socket) {
             Err(e) => println!("Error: {:?}", e.context("Failed to recive message")),
             Ok(log) => {
-                if !args.tui {
-                    println!("{log}");
+                if print_info {
+                    // println!("{log}");
                 }
-                let mut storage = storate.lock().expect("Failed to lock storage");
-                storage.add_log(log);
+                data.lock().unwrap().storage.add_log(log);
             }
         };
     }
+
+    Ok(())
 }
 
 fn listen(socket: &mut Socket) -> Result<RsLog> {
@@ -45,8 +58,4 @@ fn listen(socket: &mut Socket) -> Result<RsLog> {
     let log = flatbuffers::root::<Log>(&buf).context("Failed to deserialize log message")?;
     let log: RsLog = RsLog::from(log, ip);
     Ok(log)
-}
-
-fn deserialize_log(buf: &[u8]) -> Result<Log> {
-    flatbuffers::root::<Log>(buf).context("Failed to deserialize Log")
 }

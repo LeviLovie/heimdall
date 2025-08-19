@@ -1,78 +1,58 @@
 mod args;
+mod data;
 mod http;
 mod nng;
 mod tui;
 
 use anyhow::{Context, Result};
+use tokio::task::JoinHandle;
 use std::sync::{Arc, Mutex};
 
 use heimdall::prelude::*;
+use data::Data;
+
+fn start_thread(data: Arc<Mutex<Data>>, thread_type: ThreadType, closure: impl FnOnce(Arc<Mutex<Data>>) -> Result<()> + Send + 'static) -> JoinHandle<()> {
+    let data_clone = data.clone();
+    tokio::spawn(async move {
+        data_clone.lock().unwrap().statuses.set(
+            thread_type.clone(),
+            ThreadStatus::Running,
+        );
+        let result = closure(data_clone.clone());
+        data_clone.lock().unwrap().statuses.set(
+            thread_type.clone(),
+            match result {
+                Ok(()) => ThreadStatus::Stopped,
+                Err(e) => ThreadStatus::Failed(format!("{}", e)),
+            },
+        );
+    })
+}
 
 #[tokio::main]
 async fn main() {
     let result: Result<()> = async {
         let args = args::parse();
-        println!("Starting Heimdall server with args: {args:?}");
-
+        let data: Arc<Mutex<Data>> = Arc::new(Mutex::new(Data::new(args.clone(), Statuses::new(), Storage::new())));
         let mut handles = vec![];
-        let statuses: Arc<Mutex<Statuses>> = Arc::new(Mutex::new(Statuses::new()));
-        let storage: Arc<Mutex<Storage>> = Arc::new(Mutex::new(Storage::new()));
 
         if let Some(nng_port) = args.nng {
-            let nng_port = nng_port.unwrap_or(62000);
-            let args_clone = args.clone();
-            let statuses_clone = statuses.clone();
-            let storage_clone = storage.clone();
-            handles.push(tokio::spawn(async move {
-                statuses_clone
-                    .lock()
-                    .unwrap()
-                    .set(ThreadType::NNG, ThreadStatus::Running);
-                let result = nng::receive(args_clone, nng_port, storage_clone)
-                    .context("Failed to run NNG server");
-                let status = match result {
-                    Ok(()) => ThreadStatus::Stopped,
-                    Err(e) => ThreadStatus::Failed(format!("{}", e)),
-                };
-                statuses_clone.lock().unwrap().set(ThreadType::NNG, status);
+            handles.push(start_thread(data.clone(), ThreadType::NNG, move |data| -> Result<()> {
+                nng::receive(data, nng_port.unwrap_or(62000)).context("Failed to run NNG server")
             }));
         }
 
         if let Some(http_port) = args.http {
-            let http_port = http_port.unwrap_or(62001);
-            let args_clone = args.clone();
-            let statuses_clone = statuses.clone();
-            let storage_clone = storage.clone();
-            handles.push(tokio::spawn(async move {
-                statuses_clone
-                    .lock()
-                    .unwrap()
-                    .set(ThreadType::HTTP, ThreadStatus::Running);
-                let result = nng::receive(args_clone, http_port, storage_clone)
-                    .context("Failed to run HTTP server");
-                let status = match result {
-                    Ok(()) => ThreadStatus::Stopped,
-                    Err(e) => ThreadStatus::Failed(format!("{}", e)),
-                };
-                statuses_clone.lock().unwrap().set(ThreadType::HTTP, status);
+            handles.push(start_thread(data.clone(), ThreadType::HTTP, move |data| -> Result<()> {
+                http::receive(data, http_port.unwrap_or(62001))
+                    .context("Failed to run HTTP server")
             }));
         }
 
         if args.tui {
-            let statuses_clone = statuses.clone();
-            let storage_clone = storage.clone();
-            handles.push(tokio::spawn(async move {
-                statuses_clone
-                    .lock()
-                    .unwrap()
-                    .set(ThreadType::TUI, ThreadStatus::Running);
-                let result = tui::start(statuses_clone.clone(), storage_clone)
-                    .context("Failed to run HTTP server");
-                let status = match result {
-                    Ok(()) => ThreadStatus::Stopped,
-                    Err(e) => ThreadStatus::Failed(format!("{}", e)),
-                };
-                statuses_clone.lock().unwrap().set(ThreadType::TUI, status);
+            handles.push(start_thread(data.clone(), ThreadType::TUI, move |data| -> Result<()> {
+                tui::start(data)
+                    .context("Failed to run HTTP server")
             }));
         }
 
