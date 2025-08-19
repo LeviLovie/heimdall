@@ -1,14 +1,14 @@
-use crate::args::Args;
+use crate::args::ServerArgs;
 use heimdall::{status::Statuses, storage::Storage};
 
 pub struct Data {
-    pub args: Args,
+    pub args: ServerArgs,
     pub statuses: Statuses,
     pub storage: Storage,
 }
 
 impl Data {
-    pub fn new(args: Args, statuses: Statuses, storage: Storage) -> Self {
+    pub fn new(args: ServerArgs, statuses: Statuses, storage: Storage) -> Self {
         Self {
             args,
             statuses,

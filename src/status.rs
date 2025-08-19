@@ -54,7 +54,9 @@ impl Statuses {
 
     pub fn terminate_all(&mut self) {
         for status in self.statuses.values_mut() {
-            *status = ThreadStatus::Terminating;
+            if *status == ThreadStatus::Running {
+                *status = ThreadStatus::Terminating;
+            }
         }
     }
 

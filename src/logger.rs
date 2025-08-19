@@ -1,12 +1,12 @@
-use anyhow::{Context, Result, anyhow, bail};
-use chrono::Local;
+use anyhow::{anyhow, bail, Context, Result};
+use chrono::{DateTime, FixedOffset, Local};
 use nng::Socket;
 use std::sync::{Mutex, OnceLock};
 
 use crate::prelude::{RsContext, RsLog};
 
 pub mod prelude {
-    pub use super::{GLOBAL_LOGGER, Logger, LoggerBuilder, global_log};
+    pub use super::{current_timestamp, global_log, Logger, LoggerBuilder, GLOBAL_LOGGER};
 }
 
 pub static GLOBAL_LOGGER: OnceLock<Mutex<Logger>> = OnceLock::new();
@@ -97,8 +97,13 @@ impl Logger {
         LoggerBuilder::default()
     }
 
-    pub fn log(&self, msg: impl Into<String>, vars: Vec<(String, String)>) -> Result<()> {
-        let log = RsLog::new(Local::now().into(), msg.into(), self.context.clone(), vars);
+    pub fn log(
+        &self,
+        ts: DateTime<FixedOffset>,
+        msg: impl Into<String>,
+        vars: Vec<(String, String)>,
+    ) -> Result<()> {
+        let log = RsLog::new(ts, msg.into(), self.context.clone(), vars);
         let buf = log.build();
 
         if let Err(e) = self.socket.send(&buf) {
@@ -108,13 +113,21 @@ impl Logger {
     }
 }
 
-pub fn global_log(msg: impl Into<String>, vars: Vec<(String, String)>) -> Result<()> {
+pub fn global_log(
+    ts: DateTime<FixedOffset>,
+    msg: impl Into<String>,
+    vars: Vec<(String, String)>,
+) -> Result<()> {
     let logger = &GLOBAL_LOGGER
         .get()
         .ok_or_else(|| anyhow!("Global logger is not initialized"))?;
     logger
         .lock()
         .map_err(|_| anyhow!("Failed to lock global logger"))?
-        .log(msg, vars)
+        .log(ts, msg, vars)
         .context("Logging message using global logger")
+}
+
+pub fn current_timestamp() -> DateTime<FixedOffset> {
+    Local::now().into()
 }

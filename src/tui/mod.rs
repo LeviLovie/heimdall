@@ -108,6 +108,9 @@ impl App {
                 match (key.modifiers, key.code) {
                     (KeyModifiers::NONE, KeyCode::Char('q')) => {
                         self.data.lock().unwrap().statuses.terminate_all();
+                        return Ok(());
+                    }
+                    (KeyModifiers::NONE, KeyCode::Char('w')) => {
                         self.should_exit = true;
                         return Ok(());
                     }
