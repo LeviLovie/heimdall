@@ -15,7 +15,9 @@ fn try_main() -> Result<()> {
         .build()
         .context("Failed to build logger")?;
 
-    log!("Hello, this is gonna trigger line wrapping in the \"info\" panel. I hope it will work fine cause if not ill have to go and fix it!");
+    log!(
+        "Hello, this is gonna trigger line wrapping in the \"info\" panel. I hope it will work fine cause if not ill have to go and fix it!"
+    );
 
     println!("Log message sent successfully.");
     Ok(())

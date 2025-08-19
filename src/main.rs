@@ -1,81 +1,91 @@
 mod args;
+mod http;
+mod nng;
 mod tui;
 
 use anyhow::{Context, Result};
-use nng::options::{Options, RemAddr};
-use nng::{Pipe, Protocol, Socket};
 use std::sync::{Arc, Mutex};
 
 use heimdall::prelude::*;
-use heimdall::schemas::log::log::Log;
 
-pub fn deserialize_log(buf: &[u8]) -> Result<Log> {
-    flatbuffers::root::<Log>(buf).context("Failed to deserialize Log")
-}
+#[tokio::main]
+async fn main() {
+    let result: Result<()> = async {
+        let args = args::parse();
+        println!("Starting Heimdall server with args: {args:?}");
 
-fn main() {
-    if let Err(e) = try_main() {
+        let mut handles = vec![];
+        let statuses: Arc<Mutex<Statuses>> = Arc::new(Mutex::new(Statuses::new()));
+        let storage: Arc<Mutex<Storage>> = Arc::new(Mutex::new(Storage::new()));
+
+        if let Some(nng_port) = args.nng {
+            let nng_port = nng_port.unwrap_or(62000);
+            let args_clone = args.clone();
+            let statuses_clone = statuses.clone();
+            let storage_clone = storage.clone();
+            handles.push(tokio::spawn(async move {
+                statuses_clone
+                    .lock()
+                    .unwrap()
+                    .set(ThreadType::NNG, ThreadStatus::Running);
+                let result = nng::receive(args_clone, nng_port, storage_clone)
+                    .context("Failed to run NNG server");
+                let status = match result {
+                    Ok(()) => ThreadStatus::Stopped,
+                    Err(e) => ThreadStatus::Failed(format!("{}", e)),
+                };
+                statuses_clone.lock().unwrap().set(ThreadType::NNG, status);
+            }));
+        }
+
+        if let Some(http_port) = args.http {
+            let http_port = http_port.unwrap_or(62001);
+            let args_clone = args.clone();
+            let statuses_clone = statuses.clone();
+            let storage_clone = storage.clone();
+            handles.push(tokio::spawn(async move {
+                statuses_clone
+                    .lock()
+                    .unwrap()
+                    .set(ThreadType::HTTP, ThreadStatus::Running);
+                let result = nng::receive(args_clone, http_port, storage_clone)
+                    .context("Failed to run HTTP server");
+                let status = match result {
+                    Ok(()) => ThreadStatus::Stopped,
+                    Err(e) => ThreadStatus::Failed(format!("{}", e)),
+                };
+                statuses_clone.lock().unwrap().set(ThreadType::HTTP, status);
+            }));
+        }
+
+        if args.tui {
+            let statuses_clone = statuses.clone();
+            let storage_clone = storage.clone();
+            handles.push(tokio::spawn(async move {
+                statuses_clone
+                    .lock()
+                    .unwrap()
+                    .set(ThreadType::TUI, ThreadStatus::Running);
+                let result = tui::start(statuses_clone.clone(), storage_clone)
+                    .context("Failed to run HTTP server");
+                let status = match result {
+                    Ok(()) => ThreadStatus::Stopped,
+                    Err(e) => ThreadStatus::Failed(format!("{}", e)),
+                };
+                statuses_clone.lock().unwrap().set(ThreadType::TUI, status);
+            }));
+        }
+
+        for h in handles {
+            let _ = h.await;
+        }
+
+        Ok(())
+    }
+    .await;
+
+    if let Err(e) = result {
         eprintln!("Error: {e:?}");
         std::process::exit(1);
     }
-}
-
-fn try_main() -> Result<()> {
-    let args = args::parse();
-
-    let storage: Arc<Mutex<Storage>> = Arc::new(Mutex::new(Storage::new()));
-
-    let storage_clone = storage.clone();
-    let args_clone = args.clone();
-    std::thread::spawn(move || {
-        receive(args_clone, storage_clone).context("Failed to start a receiving server")
-    });
-
-    if args.tui {
-        tui::start(storage).context("Failed to run TUI")?;
-    } else {
-        #[allow(clippy::empty_loop)]
-        loop {}
-    }
-
-    Ok(())
-}
-
-fn receive(args: args::Args, storate: Arc<Mutex<Storage>>) -> Result<()> {
-    let bind = format!("tcp://{}:{}", args.address, args.port);
-
-    let mut socket = Socket::new(Protocol::Pull0).context("Failed to create a new socket")?;
-    socket
-        .listen(&bind)
-        .context("Failed to bind socket to address")?;
-
-    if !args.tui {
-        println!("Listening for messages on {bind}");
-    }
-
-    loop {
-        match listen(&mut socket) {
-            Err(e) => println!("Error: {:?}", e.context("Failed to recive message")),
-            Ok(log) => {
-                if !args.tui {
-                    println!("{log}");
-                }
-                let mut storage = storate.lock().expect("Failed to lock storage");
-                storage.add_log(log);
-            }
-        };
-    }
-}
-
-fn listen(socket: &mut Socket) -> Result<RsLog> {
-    let mut msg = socket.recv().context("Failed to receive message")?;
-    let pipe: Pipe = msg.pipe().context("Message missing pipe")?;
-    let ip = pipe
-        .get_opt::<RemAddr>()
-        .context("Failed to get remote address")?
-        .to_string();
-    let buf: Vec<u8> = msg.as_slice().to_vec();
-    let log = flatbuffers::root::<Log>(&buf).context("Failed to deserialize log message")?;
-    let log: RsLog = RsLog::from(log, ip);
-    Ok(log)
 }

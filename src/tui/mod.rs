@@ -15,14 +15,14 @@ use std::{
     time::Duration,
 };
 
-use heimdall::{log::RsLog, storage::Storage};
+use heimdall::{log::RsLog, status::Statuses, storage::Storage};
 
-pub fn start(storage: Arc<Mutex<Storage>>) -> Result<()> {
+pub fn start(statuses: Arc<Mutex<Statuses>>, storage: Arc<Mutex<Storage>>) -> Result<()> {
     color_eyre::install()
         .map_err(|r| anyhow!("{}", r))
         .context("Failed to install color_eyre")?;
 
-    let app = App::new(storage.clone());
+    let app = App::new(statuses, storage);
 
     let terminal = ratatui::init();
     app.run(terminal)
@@ -33,6 +33,7 @@ pub fn start(storage: Arc<Mutex<Storage>>) -> Result<()> {
 }
 
 struct App {
+    statuses: Arc<Mutex<Statuses>>,
     storage: Arc<Mutex<Storage>>,
     should_exit: bool,
     logs_state: ListState,
@@ -42,8 +43,9 @@ struct App {
 }
 
 impl App {
-    pub fn new(storage: Arc<Mutex<Storage>>) -> Self {
+    pub fn new(statuses: Arc<Mutex<Statuses>>, storage: Arc<Mutex<Storage>>) -> Self {
         Self {
+            statuses,
             storage,
             should_exit: false,
             logs_state: ListState::default(),
@@ -206,10 +208,10 @@ impl Widget for &App {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let vertical_areas =
             Layout::vertical([Constraint::Length(5), Constraint::Min(3)]).split(area);
-        let status_area = vertical_areas[0];
-        let horizontal_area = vertical_areas[1];
+        let status_horizontal_area = vertical_areas[0];
+        let logs_horizontal_area = vertical_areas[1];
 
-        let horizontal_areas = if self
+        let logs_horizontal_areas = if self
             .get_log(self.logs_state.selected().unwrap_or(0))
             .is_some()
         {
@@ -217,9 +219,15 @@ impl Widget for &App {
         } else {
             Layout::horizontal([Constraint::Min(10), Constraint::Max(0)])
         }
-        .split(horizontal_area);
-        let logs_area = horizontal_areas[0];
-        let info_area = horizontal_areas[1];
+        .split(logs_horizontal_area);
+        let logs_area = logs_horizontal_areas[0];
+        let info_area = logs_horizontal_areas[1];
+
+        let status_horizontal_areas =
+            Layout::horizontal([Constraint::Fill(1), Constraint::Length(30)])
+                .split(status_horizontal_area);
+        let status_area = status_horizontal_areas[0];
+        let threads_area = status_horizontal_areas[1];
 
         {
             let status_block = Block::bordered()
@@ -230,6 +238,44 @@ impl Widget for &App {
             let greeting =
                 Paragraph::new(format!("{} Logs, q to quit", self.logs_amount)).block(status_block);
             greeting.render(status_area, buf);
+        };
+
+        {
+            let threads_block = Block::bordered()
+                .title("Threads")
+                .title_alignment(Alignment::Center)
+                .border_type(BorderType::Rounded);
+
+            let threads = self
+                .statuses
+                .lock()
+                .expect("Failed to lock statuses")
+                .get_all()
+                .iter()
+                .map(|(kind, status)| {
+                    let status_color = match status {
+                        heimdall::status::ThreadStatus::Running => Color::Green,
+                        heimdall::status::ThreadStatus::Stopped => Color::Yellow,
+                        heimdall::status::ThreadStatus::Failed(_) => Color::Red,
+                    };
+                    Line::from(vec![
+                        Span::styled(
+                            format!("{:?}", kind),
+                            Style::default()
+                                .fg(Color::Blue)
+                                .add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled(" => ", Style::default().fg(Color::DarkGray)),
+                        Span::styled(format!("{:?}", status), Style::default().fg(status_color)),
+                    ])
+                })
+                .collect::<Vec<Line>>();
+
+            let threads_list = List::new(threads)
+                .direction(ListDirection::BottomToTop)
+                .block(threads_block)
+                .highlight_style(Style::default().bg(Color::White).fg(Color::Black));
+            Widget::render(threads_list, threads_area, buf);
         };
 
         {

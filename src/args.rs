@@ -1,28 +1,31 @@
-use argh::FromArgs;
+use clap::Parser;
+
+const LONG_ABOUT: &str = "Heimdall watches your code for bugs.\nSee https://github.com/LeviLovie/heimdall for more info.";
 
 pub fn parse() -> Args {
-    argh::from_env()
+    Args::parse()
 }
 
-#[derive(Clone, FromArgs, Debug)]
-#[argh(description = "The log analyzer")]
+#[derive(Parser, Clone, Debug)]
+#[command(
+    version,
+    about,
+    long_about = LONG_ABOUT,
+)]
 pub struct Args {
-    #[argh(switch, short = 't', description = "enable TUI")]
-    pub tui: bool,
-
-    #[argh(
-        option,
-        short = 'a',
-        description = "address to bind the socket to",
-        default = "String::from(\"127.0.0.1\")"
-    )]
+    #[arg(long, requires = "nng", default_value = "127.0.0.1")]
     pub address: String,
 
-    #[argh(
-        option,
-        short = 'p',
-        description = "port to bind the socket to",
-        default = "62000"
+    #[arg(short, long, help = "Start a Terminal User Interface")]
+    pub tui: bool,
+
+    #[arg(long, value_name = "PORT", help = "Start a NNG server (default 62000)")]
+    pub nng: Option<Option<u16>>,
+
+    #[arg(
+        long,
+        value_name = "PORT",
+        help = "Start a HTTP server (default 62001)"
     )]
-    pub port: u16,
+    pub http: Option<Option<u16>>,
 }

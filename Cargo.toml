@@ -1,19 +1,23 @@
 [package]
 name = "heimdall"
+description = "Watches your code for bugs"
+repository = "https://github.com/LeviLovie/heimdall"
+homepage = "https://github.com/LeviLovie/heimdall"
 version = "0.1.0"
 edition = "2024"
 build = "build.rs"
 
 [dependencies]
 anyhow = "1.0.99"
-argh = "0.1.13"
 chrono = "0.4.41"
+clap = { version = "4.5.45", features = ["derive"] }
 color-eyre = "0.6.5"
 crossterm = "0.29.0"
 flatbuffers = "25.2.10"
 nng = "1.0.1"
 ratatui = "0.29.0"
 sys-info = "0.9.1"
+tokio = { version = "1.47.1", features = ["full"] }
 
 [build-dependencies]
 anyhow = "1.0.99"

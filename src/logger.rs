@@ -1,4 +1,4 @@
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use chrono::Local;
 use nng::Socket;
 use std::sync::{Mutex, OnceLock};
@@ -6,7 +6,7 @@ use std::sync::{Mutex, OnceLock};
 use crate::prelude::{RsContext, RsLog};
 
 pub mod prelude {
-    pub use super::{global_log, Logger, LoggerBuilder, GLOBAL_LOGGER};
+    pub use super::{GLOBAL_LOGGER, Logger, LoggerBuilder, global_log};
 }
 
 pub static GLOBAL_LOGGER: OnceLock<Mutex<Logger>> = OnceLock::new();
