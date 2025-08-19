@@ -34,18 +34,22 @@ pub fn start(storage: Arc<Mutex<Storage>>) -> Result<()> {
 
 struct App {
     storage: Arc<Mutex<Storage>>,
-    logs_amount: usize,
     should_exit: bool,
     logs_state: ListState,
+    logs_scroll: usize,
+    logs_amount: usize,
+    logs_area_height: Arc<Mutex<usize>>,
 }
 
 impl App {
     pub fn new(storage: Arc<Mutex<Storage>>) -> Self {
         Self {
             storage,
-            logs_amount: 0,
             should_exit: false,
             logs_state: ListState::default(),
+            logs_scroll: 0,
+            logs_amount: 0,
+            logs_area_height: Arc::new(Mutex::new(0)),
         }
     }
 
@@ -76,6 +80,17 @@ impl App {
                 .select(Some(self.logs_amount.saturating_sub(1)));
         }
 
+        let visible_height = *self
+            .logs_area_height
+            .lock()
+            .expect("Failed to lock logs_area_height");
+        let selected = self.logs_state.selected().unwrap_or(0);
+        if selected < self.logs_scroll {
+            self.logs_scroll = selected;
+        } else if selected >= self.logs_scroll + visible_height {
+            self.logs_scroll = selected + 1 - visible_height;
+        }
+
         Ok(())
     }
 
@@ -87,11 +102,14 @@ impl App {
                         self.should_exit = true;
                         return Ok(());
                     }
+                    KeyCode::Char('z') => {
+                        self.center_cursor();
+                    }
                     // The list is rendered in the reverse order, so J and K should be swapped.
-                    KeyCode::Char('j') => {
+                    KeyCode::Char('j') | KeyCode::Down => {
                         self.logs_state.select_previous();
                     }
-                    KeyCode::Char('k') => {
+                    KeyCode::Char('k') | KeyCode::Up => {
                         self.logs_state.select_next();
                     }
                     _ => {}
@@ -99,6 +117,23 @@ impl App {
             }
         }
         Ok(())
+    }
+
+    fn center_cursor(&mut self) {
+        let visible_height = *self
+            .logs_area_height
+            .lock()
+            .expect("Failed to lock logs_area_height");
+        if visible_height == 0 {
+            return;
+        }
+
+        let selected = self.logs_state.selected().unwrap_or(0);
+        let middle = visible_height / 2;
+        self.logs_scroll = selected.saturating_sub(middle);
+        self.logs_scroll = self
+            .logs_scroll
+            .min(self.logs_amount.saturating_sub(visible_height));
     }
 
     fn get_log(&self, index: usize) -> Option<RsLog> {
@@ -111,15 +146,45 @@ impl App {
         }
     }
 
-    fn get_logs_list(&self) -> List {
+    fn get_visible_logs(&self, height: usize) -> Vec<Line> {
         let storage = self.storage.lock().expect("Failed to lock storage");
-        let logs = storage
-            .get_logs()
+        let logs = storage.get_logs().iter().rev().collect::<Vec<_>>();
+
+        if logs.is_empty() {
+            return vec![];
+        }
+
+        let start = self.logs_scroll;
+        let end = std::cmp::min(start + height, logs.len());
+
+        logs[start..end]
             .iter()
-            .map(|log| format!("{log}"))
-            .rev()
-            .collect::<Vec<_>>();
-        List::new(logs).direction(ListDirection::BottomToTop)
+            .map(|log| {
+                let mut spans = vec![
+                    Span::styled(
+                        format!("{}", log.ts.format("%H:%M:%S%.6f")),
+                        Style::default()
+                            .fg(Color::Blue)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(": ", Style::default().fg(Color::DarkGray)),
+                    Span::raw(format!("{}", log.msg)),
+                ];
+
+                if !log.vars.is_empty() {
+                    spans.push(Span::raw(" "));
+                }
+                for var in log.vars.iter() {
+                    spans.extend(vec![
+                        Span::styled(format!("{}", var.key), Style::default().fg(Color::Green)),
+                        Span::styled("=", Style::default().fg(Color::DarkGray)),
+                        Span::styled(format!("{}", var.val), Style::default().fg(Color::Yellow)),
+                    ]);
+                }
+
+                Line::from(spans)
+            })
+            .collect()
     }
 }
 
@@ -158,12 +223,23 @@ impl Widget for &App {
                 .title("Logs")
                 .title_alignment(Alignment::Center)
                 .border_type(BorderType::Rounded);
+            *self
+                .logs_area_height
+                .lock()
+                .expect("Failed to log logs_area_height mutex") =
+                logs_block.inner(logs_area).height as usize;
+            let visible_height = logs_area.height as usize;
+            let visible_logs = self.get_visible_logs(visible_height);
 
-            let logs_list = self
-                .get_logs_list()
+            let mut logs_state = ListState::default();
+            logs_state.select(Some(
+                self.logs_state.selected().unwrap_or(0) - self.logs_scroll,
+            ));
+
+            let logs_list = List::new(visible_logs)
+                .direction(ListDirection::BottomToTop)
                 .block(logs_block)
                 .highlight_style(Style::default().bg(Color::White).fg(Color::Black));
-            let mut logs_state = self.logs_state.clone();
             StatefulWidget::render(logs_list, logs_area, buf, &mut logs_state);
         };
 

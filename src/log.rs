@@ -132,19 +132,14 @@ impl RsLog {
 
 impl std::fmt::Display for RsLog {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let formatted_ts = self.ts.format("%H:%M:%S%.3f");
         let vars_str = self
             .vars
             .iter()
             .map(|var| format!("{}={}", var.key, var.val))
             .collect::<Vec<_>>()
             .join(", ");
-        let version_str = if !self.context.version.is_empty() {
-            format!(" version={}", self.context.version)
-        } else {
-            String::new()
-        };
-        let context_str = format!("pid={}{}", self.context.pid, version_str);
 
-        write!(f, "{} {}: {} {}", self.ts, context_str, self.msg, vars_str)
+        write!(f, "{}: {} {}", formatted_ts, self.msg, vars_str)
     }
 }
