@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Context, Result};
-use crossterm::event::{self, KeyCode};
+use crossterm::event::{self, KeyCode, KeyModifiers};
 use ratatui::{
     buffer::Buffer,
     layout::{Alignment, Constraint, Layout, Rect},
@@ -97,21 +97,35 @@ impl App {
     fn pool_events(&mut self) -> Result<()> {
         if event::poll(Duration::from_millis(250)).context("Failed to poll event")? {
             if let event::Event::Key(key) = event::read().context("Failed to read event")? {
-                match key.code {
-                    KeyCode::Char('q') => {
+                match (key.modifiers, key.code) {
+                    (KeyModifiers::NONE, KeyCode::Char('q')) => {
                         self.should_exit = true;
                         return Ok(());
                     }
-                    KeyCode::Char('z') => {
+
+                    (KeyModifiers::SHIFT, KeyCode::Down)
+                    | (KeyModifiers::NONE, KeyCode::Char('g')) => {
+                        self.logs_state.select(Some(0));
+                    }
+                    (KeyModifiers::SHIFT, KeyCode::Up)
+                    | (KeyModifiers::SHIFT, KeyCode::Char('G')) => {
+                        self.logs_state
+                            .select(Some(self.logs_amount.saturating_sub(1)));
+                    }
+
+                    (KeyModifiers::NONE, KeyCode::Char('z')) => {
                         self.center_cursor();
                     }
                     // The list is rendered in the reverse order, so J and K should be swapped.
-                    KeyCode::Char('j') | KeyCode::Down => {
+                    (KeyModifiers::NONE, KeyCode::Char('j'))
+                    | (KeyModifiers::NONE, KeyCode::Down) => {
                         self.logs_state.select_previous();
                     }
-                    KeyCode::Char('k') | KeyCode::Up => {
+                    (KeyModifiers::NONE, KeyCode::Char('k'))
+                    | (KeyModifiers::NONE, KeyCode::Up) => {
                         self.logs_state.select_next();
                     }
+
                     _ => {}
                 }
             }
