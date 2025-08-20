@@ -168,7 +168,7 @@ impl App {
         logs.get(index).map(|log| (*log).clone())
     }
 
-    fn get_visible_logs(&self, height: usize) -> Vec<Line> {
+    fn get_visible_logs(&self, height: usize) -> Vec<Line<'_>> {
         let data = self.data.lock().unwrap();
         let logs = data.storage.get_logs().iter().rev().collect::<Vec<_>>();
 
