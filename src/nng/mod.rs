@@ -18,7 +18,7 @@ pub fn receive(data: Arc<Mutex<Data>>, port: u16) -> Result<()> {
         .context("Failed to bind socket to address")?;
 
     if print_info {
-        // println!("Listening for messages on {bind}");
+        println!("Listening for messages on {bind}");
     }
 
     loop {
@@ -36,10 +36,12 @@ pub fn receive(data: Arc<Mutex<Data>>, port: u16) -> Result<()> {
         match listen(&mut socket) {
             Err(e) => println!("Error: {:?}", e.context("Failed to recive message")),
             Ok(log) => {
-                if print_info {
-                    // println!("{log}");
+                if let Some(log) = log {
+                    if print_info {
+                        println!("{log}");
+                    }
+                    data.lock().unwrap().storage.add_log(log);
                 }
-                data.lock().unwrap().storage.add_log(log);
             }
         };
     }
@@ -47,15 +49,20 @@ pub fn receive(data: Arc<Mutex<Data>>, port: u16) -> Result<()> {
     Ok(())
 }
 
-fn listen(socket: &mut Socket) -> Result<RsLog> {
-    let mut msg = socket.recv().context("Failed to receive message")?;
-    let pipe: Pipe = msg.pipe().context("Message missing pipe")?;
-    let ip = pipe
-        .get_opt::<RemAddr>()
-        .context("Failed to get remote address")?
-        .to_string();
-    let buf: Vec<u8> = msg.as_slice().to_vec();
-    let log = flatbuffers::root::<Log>(&buf).context("Failed to deserialize log message")?;
-    let log: RsLog = RsLog::from(log, ip);
-    Ok(log)
+fn listen(socket: &mut Socket) -> Result<Option<RsLog>> {
+    match socket.try_recv() {
+        Ok(mut msg) => {
+            let pipe: Pipe = msg.pipe().context("Message missing pipe")?;
+            let ip = pipe
+                .get_opt::<RemAddr>()
+                .context("Failed to get remote address")?
+                .to_string();
+            let buf: Vec<u8> = msg.as_slice().to_vec();
+            let log =
+                flatbuffers::root::<Log>(&buf).context("Failed to deserialize log message")?;
+            Ok(Some(RsLog::from(log, ip)))
+        }
+        Err(nng::Error::TryAgain) => Ok(None),
+        Err(e) => Err(e.into()),
+    }
 }

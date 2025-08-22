@@ -1,8 +1,9 @@
 mod panels;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use crossterm::event::{self, KeyCode, KeyModifiers};
 use ratatui::{
+    DefaultTerminal,
     buffer::Buffer,
     layout::{Alignment, Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -10,7 +11,6 @@ use ratatui::{
     widgets::{
         Block, BorderType, List, ListDirection, ListState, Paragraph, StatefulWidget, Widget, Wrap,
     },
-    DefaultTerminal,
 };
 use std::{
     sync::{Arc, Mutex},
@@ -82,7 +82,7 @@ impl App {
         self.logs_amount = self.data.lock().unwrap().storage.get_logs().len();
 
         if self.logs_state.selected().is_none() && self.logs_amount > 0 {
-            self.logs_state.select(Some(0));
+            self.logs_state.select(Some(1));
         } else if self.logs_state.selected().unwrap_or(0) >= self.logs_amount {
             self.logs_state
                 .select(Some(self.logs_amount.saturating_sub(1)));
@@ -301,7 +301,10 @@ impl Widget for &App {
 
             let mut logs_state = ListState::default();
             logs_state.select(Some(
-                self.logs_state.selected().unwrap_or(0) - self.logs_scroll,
+                self.logs_state
+                    .selected()
+                    .unwrap_or(0)
+                    .saturating_sub(self.logs_scroll),
             ));
 
             let logs_list = List::new(visible_logs)
