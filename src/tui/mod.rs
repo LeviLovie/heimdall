@@ -125,53 +125,34 @@ impl App {
                     _ => {}
                 }
 
-                if let Some(popup) = self.app_data.borrow_mut().popups.first_mut() {
+                let mut app_data = self.app_data.borrow_mut();
+
+                if let Some(popup) = app_data.popups.get_mut(0) {
                     popup.on_event(key);
                 } else {
                     match (key.modifiers, key.code) {
                         (KeyModifiers::NONE, KeyCode::Char('w')) => {
-                            self.app_data.borrow_mut().should_exit = true;
+                            app_data.should_exit = true;
                             return Ok(());
                         }
 
                         // The list is rendered in the reverse order, so J and K should be swapped.
                         (KeyModifiers::NONE, KeyCode::Char('j'))
                         | (KeyModifiers::NONE, KeyCode::Down) => {
-                            self.app_data
-                                .borrow_mut()
-                                .logs_panel
-                                .logs_state
-                                .select_previous();
+                            app_data.logs_panel.logs_state.select_previous();
                         }
                         (KeyModifiers::NONE, KeyCode::Char('k'))
                         | (KeyModifiers::NONE, KeyCode::Up) => {
-                            self.app_data
-                                .borrow_mut()
-                                .logs_panel
-                                .logs_state
-                                .select_next();
+                            app_data.logs_panel.logs_state.select_next();
                         }
                         (KeyModifiers::SHIFT, KeyCode::Down)
                         | (KeyModifiers::NONE, KeyCode::Char('g')) => {
-                            self.app_data
-                                .borrow_mut()
-                                .logs_panel
-                                .logs_state
-                                .select(Some(
-                                    self.app_data
-                                        .borrow_mut()
-                                        .logs_panel
-                                        .logs_amount
-                                        .saturating_sub(1),
-                                ));
+                            let new_logs_amount = app_data.logs_panel.logs_amount.saturating_sub(1);
+                            app_data.logs_panel.logs_state.select(Some(new_logs_amount));
                         }
                         (KeyModifiers::SHIFT, KeyCode::Up)
                         | (KeyModifiers::SHIFT, KeyCode::Char('G')) => {
-                            self.app_data
-                                .borrow_mut()
-                                .logs_panel
-                                .logs_state
-                                .select(Some(0));
+                            app_data.logs_panel.logs_state.select(Some(0));
                         }
 
                         _ => {}
@@ -191,22 +172,14 @@ impl Widget for &App {
         let [status, threads] =
             Layout::horizontal([Constraint::Fill(1), Constraint::Length(30)]).areas(statuses);
 
-        let log = self
-            .app_data
-            .borrow()
-            .logs_panel
-            .visible_logs
-            .iter()
-            .find(|(id, _)| {
-                id == &self
-                    .app_data
-                    .borrow()
-                    .logs_panel
-                    .logs_state
-                    .selected()
-                    .unwrap_or(0)
-            })
-            .map(|(_, log)| log.clone());
+        let log = self.app_data.borrow().data.lock().unwrap().storage.get_log(
+            self.app_data
+                .borrow()
+                .logs_panel
+                .logs_state
+                .selected()
+                .unwrap_or(0),
+        );
 
         let [logs, info] = if log.is_some() {
             Layout::horizontal([Constraint::Fill(2), Constraint::Fill(1)])

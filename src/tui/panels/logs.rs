@@ -45,6 +45,10 @@ impl LogsPanel {
         }
         if self.logs_state.selected().is_none() {
             self.logs_state.select(Some(0));
+        } else {
+            if self.logs_state.selected().unwrap() >= total_logs {
+                self.logs_state.select(Some(total_logs - 1));
+            }
         }
 
         let selected = self.logs_state.selected().unwrap();
