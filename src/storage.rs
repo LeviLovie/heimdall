@@ -1,5 +1,5 @@
 use chrono::{DateTime, FixedOffset};
-use rusqlite::{params, Connection, OptionalExtension, Result};
+use rusqlite::{Connection, OptionalExtension, Result, params};
 
 use crate::prelude::{RsContext, RsLog, RsVar};
 
