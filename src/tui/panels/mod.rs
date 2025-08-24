@@ -11,6 +11,6 @@ pub trait Panel {
 
 pub mod prelude {
     pub use super::{
-        info::InfoPanel, logs::LogsPanel, status::StatusPanel, threads::ThreadsPanel, Panel,
+        Panel, info::InfoPanel, logs::LogsPanel, status::StatusPanel, threads::ThreadsPanel,
     };
 }

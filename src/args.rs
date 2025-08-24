@@ -40,6 +40,13 @@ pub struct ServerArgs {
         help = "Start a HTTP server (default 62001)"
     )]
     pub http: Option<Option<u16>>,
+
+    #[arg(
+        long,
+        value_name = "FILE",
+        help = "Use a SQLite database at FILE (default logs.sqlite)"
+    )]
+    pub sqlite: Option<Option<String>>,
 }
 
 #[derive(ClapArgs, Clone, Debug)]

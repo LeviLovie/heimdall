@@ -38,10 +38,16 @@ fn start_thread(
 }
 
 async fn start_server(args: ServerArgs) -> Result<()> {
+    let storage = if let Some(path) = args.sqlite.clone() {
+        Storage::new_sqlite(path.unwrap_or("logs.sqlite".to_string()))
+            .context("Failed to create SQLite storage")?
+    } else {
+        Storage::new_memory()
+    };
     let data: Arc<Mutex<Data>> = Arc::new(Mutex::new(Data::new(
         args.clone(),
         Statuses::new(),
-        Storage::new(),
+        storage,
     )));
     let mut handles = vec![];
 

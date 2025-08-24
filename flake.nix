@@ -21,6 +21,7 @@
             lld
             llvm
             rustup
+            sqlite
             zsh
           ];
 

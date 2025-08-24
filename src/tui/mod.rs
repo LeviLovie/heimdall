@@ -16,7 +16,7 @@ use std::{
 };
 
 use crate::data::Data;
-use heimdall::{log::RsLog, status::ThreadType};
+use heimdall::status::ThreadType;
 
 pub fn start(data: Arc<Mutex<Data>>) -> Result<()> {
     color_eyre::install()
@@ -36,7 +36,6 @@ pub fn start(data: Arc<Mutex<Data>>) -> Result<()> {
 struct App {
     data: Arc<Mutex<Data>>,
     should_exit: bool,
-    logs_amount: usize,
     logs_panel: LogsPanel,
 }
 
@@ -45,7 +44,6 @@ impl App {
         Self {
             data: data.clone(),
             should_exit: false,
-            logs_amount: 0,
             logs_panel: LogsPanel::new(data.clone()),
         }
     }
@@ -74,8 +72,7 @@ impl App {
             self.should_exit = true;
         }
 
-        self.logs_amount = self.data.lock().unwrap().storage.get_logs().len();
-        self.logs_panel.update(self.logs_amount);
+        self.logs_panel.update();
 
         Ok(())
     }
@@ -93,20 +90,6 @@ impl App {
                         return Ok(());
                     }
 
-                    (KeyModifiers::SHIFT, KeyCode::Down)
-                    | (KeyModifiers::NONE, KeyCode::Char('g')) => {
-                        self.logs_panel.logs_state.select(Some(0));
-                    }
-                    (KeyModifiers::SHIFT, KeyCode::Up)
-                    | (KeyModifiers::SHIFT, KeyCode::Char('G')) => {
-                        self.logs_panel
-                            .logs_state
-                            .select(Some(self.logs_amount.saturating_sub(1)));
-                    }
-
-                    (KeyModifiers::NONE, KeyCode::Char('z')) => {
-                        self.logs_panel.center_cursor(self.logs_amount);
-                    }
                     // The list is rendered in the reverse order, so J and K should be swapped.
                     (KeyModifiers::NONE, KeyCode::Char('j'))
                     | (KeyModifiers::NONE, KeyCode::Down) => {
@@ -116,18 +99,22 @@ impl App {
                     | (KeyModifiers::NONE, KeyCode::Up) => {
                         self.logs_panel.logs_state.select_next();
                     }
+                    (KeyModifiers::SHIFT, KeyCode::Down)
+                    | (KeyModifiers::NONE, KeyCode::Char('g')) => {
+                        self.logs_panel
+                            .logs_state
+                            .select(Some(self.logs_panel.logs_amount.saturating_sub(1)));
+                    }
+                    (KeyModifiers::SHIFT, KeyCode::Up)
+                    | (KeyModifiers::SHIFT, KeyCode::Char('G')) => {
+                        self.logs_panel.logs_state.select(Some(0));
+                    }
 
                     _ => {}
                 }
             }
         }
         Ok(())
-    }
-
-    fn get_log(&self, index: usize) -> Option<RsLog> {
-        let data = self.data.lock().unwrap();
-        let logs = data.storage.get_logs().iter().rev().collect::<Vec<_>>();
-        logs.get(index).map(|log| (*log).clone())
     }
 }
 
@@ -139,21 +126,25 @@ impl Widget for &App {
         let [status, threads] =
             Layout::horizontal([Constraint::Fill(1), Constraint::Length(30)]).areas(statuses);
 
-        let [logs, info] = if self
-            .get_log(self.logs_panel.logs_state.selected().unwrap_or(0))
-            .is_some()
-        {
+        let log = self
+            .logs_panel
+            .visible_logs
+            .iter()
+            .find(|(id, _)| id == &self.logs_panel.logs_state.selected().unwrap_or(0))
+            .map(|(_, log)| log.clone());
+
+        let [logs, info] = if log.is_some() {
             Layout::horizontal([Constraint::Fill(2), Constraint::Fill(1)])
         } else {
             Layout::horizontal([Constraint::Min(10), Constraint::Max(0)])
         }
         .areas(data);
 
-        StatusPanel::from(self.logs_amount).render(status, buf);
+        StatusPanel::from(self.logs_panel.logs_amount).render(status, buf);
         ThreadsPanel::from(self.data.clone()).render(threads, buf);
         self.logs_panel.render(logs, buf);
 
-        if let Some(log) = self.get_log(self.logs_panel.logs_state.selected().unwrap_or(0)) {
+        if let Some(log) = log {
             InfoPanel::from(log).render(info, buf);
         }
     }

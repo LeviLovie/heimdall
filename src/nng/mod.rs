@@ -40,7 +40,11 @@ pub fn receive(data: Arc<Mutex<Data>>, port: u16) -> Result<()> {
                     if print_info {
                         println!("{log}");
                     }
-                    data.lock().unwrap().storage.add_log(log);
+                    data.lock()
+                        .unwrap()
+                        .storage
+                        .add_log(log)
+                        .context("Failed to add log to storage")?;
                 }
             }
         };

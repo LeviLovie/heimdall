@@ -9,12 +9,16 @@ use std::sync::{Arc, Mutex};
 
 use super::Panel;
 use crate::data::Data;
+use heimdall::log::RsLog;
 
 pub struct LogsPanel {
     pub data: Arc<Mutex<Data>>,
     pub area_height: Arc<Mutex<usize>>,
     pub logs_state: ListState,
     pub logs_scroll: usize,
+    pub logs_amount: usize,
+    pub visible_logs: Vec<(usize, RsLog)>,
+    pub updated: bool,
 }
 
 impl LogsPanel {
@@ -24,79 +28,85 @@ impl LogsPanel {
             area_height: Arc::new(Mutex::new(0)),
             logs_scroll: 0,
             logs_state: ListState::default(),
+            logs_amount: 0,
+            visible_logs: vec![],
+            updated: false,
         }
     }
 
-    pub fn update(&mut self, logs_amount: usize) {
-        if self.logs_state.selected().is_none() && logs_amount > 0 {
-            self.logs_state.select(Some(1));
-        } else if self.logs_state.selected().unwrap_or(0) >= logs_amount {
-            self.logs_state.select(Some(logs_amount.saturating_sub(1)));
-        }
+    pub fn update(&mut self) {
+        let data = self.data.lock().unwrap();
 
-        let visible_height = *self
-            .area_height
-            .lock()
-            .expect("Failed to lock logs_area_height");
-        let selected = self.logs_state.selected().unwrap_or(0);
-        if selected < self.logs_scroll {
-            self.logs_scroll = selected;
-        } else if selected >= self.logs_scroll + visible_height {
-            self.logs_scroll = selected + 1 - visible_height;
-        }
-    }
-
-    pub fn center_cursor(&mut self, logs_amount: usize) {
-        let visible_height = *self
-            .area_height
-            .lock()
-            .expect("Failed to lock logs_area_height");
-        if visible_height == 0 {
+        let total_logs = data.storage.logs_amount();
+        if total_logs == 0 {
+            self.logs_state.select(None);
+            self.visible_logs.clear();
             return;
         }
-
-        let selected = self.logs_state.selected().unwrap_or(0);
-        let middle = visible_height / 2;
-        self.logs_scroll = selected.saturating_sub(middle);
-        self.logs_scroll = self
-            .logs_scroll
-            .min(logs_amount.saturating_sub(visible_height));
-    }
-
-    fn get_visible_logs(&self, height: usize) -> Vec<Line<'_>> {
-        let data = self.data.lock().unwrap();
-        let logs = data.storage.get_logs().iter().rev().collect::<Vec<_>>();
-
-        if logs.is_empty() {
-            return vec![];
+        if self.logs_state.selected().is_none() {
+            self.logs_state.select(Some(0));
         }
 
-        let start = self.logs_scroll;
-        let end = std::cmp::min(start + height, logs.len());
+        let selected = self.logs_state.selected().unwrap();
 
-        logs[start..end]
+        let visible_height = *self.area_height.lock().unwrap();
+        if visible_height > 0 {
+            let middle = visible_height / 2;
+            self.logs_scroll = selected.saturating_sub(middle);
+            self.logs_scroll = self
+                .logs_scroll
+                .min(total_logs.saturating_sub(visible_height));
+        }
+
+        let chunk_size = 64;
+        let area_height = *self.area_height.lock().unwrap();
+        let chunk_start = (self.logs_scroll / chunk_size) * chunk_size;
+
+        self.visible_logs = data
+            .storage
+            .get_visible_logs(chunk_start, chunk_size + area_height)
+            .unwrap_or_default();
+
+        self.logs_amount = total_logs;
+        self.updated = false;
+    }
+
+    fn get_visible_logs(&self) -> Vec<Line<'_>> {
+        let scroll_offset_in_chunk = self.logs_scroll % 64;
+        let visible_height = *self.area_height.lock().unwrap();
+
+        let logs_slice = &self.visible_logs[scroll_offset_in_chunk
+            ..self
+                .visible_logs
+                .len()
+                .min(scroll_offset_in_chunk + visible_height)];
+
+        if logs_slice.is_empty() {
+            return vec![Line::from(Span::styled(
+                "No logs yet",
+                Style::default().add_modifier(Modifier::ITALIC),
+            ))];
+        }
+
+        logs_slice
             .iter()
             .map(|log| {
                 let mut spans = vec![
                     Span::styled(
-                        format!("{}", log.ts.format("%H:%M:%S%.6f")),
+                        format!("{}", log.1.ts.format("%H:%M:%S%.6f")),
                         Style::default()
                             .fg(Color::Blue)
                             .add_modifier(Modifier::BOLD),
                     ),
                     Span::styled(": ", Style::default().fg(Color::DarkGray)),
-                    Span::raw(format!("{}", log.msg)),
+                    Span::raw(format!("{}", log.1.msg)),
                 ];
 
-                if !log.vars.is_empty() {
+                for var in &log.1.vars {
                     spans.push(Span::raw(" "));
-                }
-                for var in log.vars.iter() {
-                    spans.extend(vec![
-                        Span::styled(format!("{}", var.key), Style::default().fg(Color::Green)),
-                        Span::styled("=", Style::default().fg(Color::DarkGray)),
-                        Span::styled(format!("{}", var.val), Style::default().fg(Color::Yellow)),
-                    ]);
+                    spans.push(Span::styled(&var.key, Style::default().fg(Color::Green)));
+                    spans.push(Span::styled("=", Style::default().fg(Color::DarkGray)));
+                    spans.push(Span::styled(&var.val, Style::default().fg(Color::Yellow)));
                 }
 
                 Line::from(spans)
@@ -116,8 +126,7 @@ impl Panel for LogsPanel {
             .area_height
             .lock()
             .expect("Failed to log area_height mutex") = block.inner(area).height as usize;
-        let visible_height = area.height as usize;
-        let visible_logs = self.get_visible_logs(visible_height);
+        let visible_logs = self.get_visible_logs();
 
         let mut logs_state = ListState::default();
         logs_state.select(Some(
